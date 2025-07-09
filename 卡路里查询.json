@@ -1,0 +1,1006 @@
+{
+  "name": "卡路里查询实时",
+  "nodes": [
+    {
+      "parameters": {
+        "resource": "image",
+        "operation": "analyze",
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o",
+          "mode": "list",
+          "cachedResultName": "GPT-4O"
+        },
+        "text": "=You are a professional nutrition analyst. Your goal is to Analyze this food photo for each visible item and output a structured JSON with clear calorie and macro estimates.\n\nCORE FUNCTIONALITY\n• When shown a food image, identify each item and its main components (protein, carb, fat, etc.)\n•Assume a standard reference (e.g. 26 cm dinner plate, 250 ml cup, standard fork) for scale  \n*  Note if it looks like a restaurant-prepared dish—if so, assume extra cooking fat: sauté or sauce fat up by ~1 Tbsp (14 g) per portion\n\n* Estimate portion sizes in grams. Use reference cues in the image (cups, standard glass size, bread size, common utensils) to scale portions.\n* Make assumptions realistic. Prefer common serving sizes.\n• List any assumptions (shape, density, coverage %) you use to estimate size   \n• Estimate calories & macros per item using trusted databases (USDA FoodData Central, European equivalents), adjusting for added restaurant fat\n• Note visible cooking methods or add-ins (oil, sauce, butter)\n• Calculate calories for each item, giving a plausible range\n• Sum to a total calories range\n\nJSON OUTPUT SCHEMA\n\n{\n  \"overview\": \"Brief sentence about the full plate or spread\",\n  \"short_name\": \"burger with fries\",\n  \"items\": [\n    {\n      \"name\": \"Item name\",\n      \"type\": \"protein | carb | fat | beverage | etc.\",\n      \"portion_size\": \"e.g. 1 cup, 2 slices\",\n      \"cooking_method\": \"if obvious\",\n      \"macros_g\": {\n        \"protein\": 0,\n        \"carbs\": 0,\n        \"fat\": 0\n      },\n      \"calories_kcal\": {\n        \"low\": 0,\n        \"high\": 0\n      },\n      \"assumptions\": \"Any guesses you made\"\n    }\n  ],\n  \"total_calories_kcal\": {\n    \"low\": 0,\n    \"high\": 0\n  },\n  \"total_macros\": {\n      \"proteins\": {\n        \"low\": 0,\n        \"high\": 0\n      },\n      \"carbs\": {\n        \"low\": 0,\n        \"high\": 0\n      },\n      \"fat\": {\n        \"low\": 0,\n        \"high\": 0\n      },\n    },\n  \"notes\": \"Any limitations or “estimate may vary” warnings\"\n}\n\nFOOD ANALYSIS GUIDELINES\n• Start with “overview” for the whole meal\n• For each item, fill every field in the schema\n• Give calories as a low–high range\n• Explain assumptions in the “assumptions” field\n• If unsure or image is unclear, add warnings in “notes”\n* If the user is writing Additional notes regarding the food, incorporate this (This is Voluntary):\n{{ $json.filename || 'unknown.jpg' }}\n\n",
+        "inputType": "base64",
+        "binaryPropertyName": "data0",
+        "options": {
+          "maxTokens": 2000
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        660,
+        220
+      ],
+      "id": "77b5c9b6-478e-4bd9-8ec9-d485eab6d38b",
+      "name": "OpenAI",
+      "credentials": {
+        "openAiApi": {
+          "id": "qy20BDOTlLQJ9uMb",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  let rawJson = item.json.content;\n\n  // 清理 markdown 包裹\n  if (rawJson.startsWith('```json')) {\n    rawJson = rawJson.replace(/^```json[\\r\\n]+/, '').replace(/```$/, '');\n  }\n\n  let parsed;\n  try {\n    parsed = JSON.parse(rawJson);\n  } catch (err) {\n    // 返回错误信息，保留原始字符串方便调试\n    return {\n      json: {\n        error: true,\n        message: err.message,\n        raw_snippet: rawJson.slice(0, 500) + '...'  // 只打印前500个字符\n      }\n    };\n  }\n\n  return {\n    json: parsed\n  };\n});\n\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        840,
+        240
+      ],
+      "id": "6edc44da-c61c-41f4-8e0f-2c04346f4449",
+      "name": "解析结构"
+    },
+    {
+      "parameters": {
+        "public": true,
+        "initialMessages": "你好呀 👋\n请拍照给我，我会自动计算你每顿，每天和每月的卡路里哦～",
+        "options": {
+          "allowFileUploads": true
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -1420,
+        320
+      ],
+      "id": "56e53be6-294a-4be5-a45d-92c125d055d7",
+      "name": "When chat message received",
+      "webhookId": "da0d017f-f6c8-4e4b-ad4c-2db92d19bb7f"
+    },
+    {
+      "parameters": {
+        "options": {
+          "systemMessage": "你是一位营养师助手，用户的问题是：\n{{ $json.chatInput }}\n\n以下是结构化的用户意图信息：\n意图：{{ $json.intent }}\n日期：{{ $json.date }}\n食物：{{ $json.item }}\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.9,
+      "position": [
+        1060,
+        1380
+      ],
+      "id": "4c9f9eb2-b579-43a7-956e-58c0dadf31d6",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4o-mini"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        200,
+        1620
+      ],
+      "id": "53aa3634-9b98-4ea5-a28a-55b9d6a55926",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "swewjuzYX9Z3PE56",
+          "name": "OpenAi account 2"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        540,
+        1580
+      ],
+      "id": "f01dffb4-570c-48d7-8dbb-dfe0f080dbc9",
+      "name": "Simple Memory"
+    },
+    {
+      "parameters": {
+        "collection": "food_analysis",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mongoDbTool",
+      "typeVersion": 1.1,
+      "position": [
+        1100,
+        1560
+      ],
+      "id": "07699096-cd52-4375-a26e-e117bd2f6fb1",
+      "name": "MongoDB",
+      "credentials": {
+        "mongoDb": {
+          "id": "N6R9oqDschm5r4Cy",
+          "name": "MongoDB account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "collection": "food_analysis",
+        "fields": "=Date,Time,Food,Calories,Proteins,Carbs,Fat,Overview\n",
+        "options": {
+          "dateFields": ""
+        }
+      },
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1.1,
+      "position": [
+        1340,
+        260
+      ],
+      "id": "61658a0e-2558-4b31-a1db-9f8b0d62fa47",
+      "name": "MongoDB1",
+      "credentials": {
+        "mongoDb": {
+          "id": "N6R9oqDschm5r4Cy",
+          "name": "MongoDB account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "6c90580d-75af-4f6b-9a56-841bd56cab65",
+              "name": "Date",
+              "value": "={{ $now.format('yyyy-MM-dd') }}",
+              "type": "string"
+            },
+            {
+              "id": "98655c29-cc01-4140-b2c1-77656e5c3f18",
+              "name": "Time",
+              "value": "={{ $now.format('HH:mm:ss') }}",
+              "type": "string"
+            },
+            {
+              "id": "e9d658db-ea18-4ca8-bd6e-97331c337012",
+              "name": "=Food",
+              "value": "={{ $json.short_name }}",
+              "type": "string"
+            },
+            {
+              "id": "6b9696ab-a3f8-4404-9a35-3ff4b0a66171",
+              "name": "Calories",
+              "value": "={{ ($json.total_calories_kcal.low + $json.total_calories_kcal.high) / 2 }}",
+              "type": "string"
+            },
+            {
+              "id": "141b6660-555e-47aa-a485-a5232d2ae6c9",
+              "name": "Proteins",
+              "value": "={{ ($json.total_macros.proteins.low + $json.total_macros.proteins.high) / 2 }}",
+              "type": "string"
+            },
+            {
+              "id": "0a31592b-ed8d-4794-8c07-8c227c303127",
+              "name": "Carbs",
+              "value": "=\t{{ ($json.total_macros.carbs.low + $json.total_macros.carbs.high) / 2 }}",
+              "type": "string"
+            },
+            {
+              "id": "f3c70fb1-1abd-4970-bbdb-7db37f5c033c",
+              "name": "Fat",
+              "value": "=\t{{ ($json.total_macros.fat.low + $json.total_macros.fat.high) / 2 }}",
+              "type": "string"
+            },
+            {
+              "id": "9edb6d6f-5ad2-4b17-a20f-ce84aee17d77",
+              "name": "Overview",
+              "value": "={{ $json.overview }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1040,
+        260
+      ],
+      "id": "ab334a02-843c-4534-9eb3-a11ea40ad4ac",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.files[0].fileExtension }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "string",
+                      "operation": "exists",
+                      "singleValue": true
+                    },
+                    "id": "3477ebdd-2fed-4d1a-9199-983d4a97f7fb"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "image"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "20c99148-4c87-413c-a642-84af1b9eff65",
+                    "leftValue": "={{ !$json.files || !$json.files[0] }}",
+                    "rightValue": true,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "text"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        -660,
+        320
+      ],
+      "id": "f84be2e9-d389-4652-9297-600f38a94a0f",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "operation": "aggregate",
+        "collection": "food_analysis",
+        "query": "=[\n  {\n    \"$match\": {\n      \"Date\": {{ $json.match.Date.$regex ? \n        `{ \"$regex\": \"${$json.match.Date.$regex}\" }` : \n        `\"${$json.match.Date}\"` }}\n    }\n  },\n  {\n    \"$group\": {\n      \"_id\": null,\n      \"totalCalories\": {\n        \"$sum\": {\n          \"$toDouble\": \"$Calories\"\n        }\n      }\n    }\n  }\n]\n"
+      },
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1.1,
+      "position": [
+        780,
+        420
+      ],
+      "id": "1b2f8bfe-cb46-4946-a9df-a6033916970f",
+      "name": "MongoDB2",
+      "alwaysOutputData": true,
+      "credentials": {
+        "mongoDb": {
+          "id": "N6R9oqDschm5r4Cy",
+          "name": "MongoDB account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "03a6337a-534b-4a39-a9eb-4182df1f9101",
+              "name": "total",
+              "value": "={{ $json.totalCalories }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1460,
+        500
+      ],
+      "id": "42915c06-4720-47e2-8297-d452d85c131e",
+      "name": "Edit Fields1"
+    },
+    {
+      "parameters": {
+        "jsCode": "let total = 0;\nlet details = [];\n\nfor (const item of items) {\n  const j = item.json;\n  \n  if (j.total !== undefined) {\n    total = j.total;\n  } else if (j.Food) {\n    details.push(\n      `- ${j.Time} 吃了「${j.Food}」，热量 ${j.Calories} 千卡，蛋白质 ${j.Proteins}g，碳水 ${j.Carbs.trim()}g，脂肪 ${j.Fat.trim()}g`\n    );\n  }\n}\n\nreturn [\n  {\n    json: {\n      text: `你今天一共吃了 ${total} 卡路里，以下是详细记录：\\n${details.join('\\n')}\\n\\n继续保持健康饮食哦～`\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1940,
+        600
+      ],
+      "id": "80e7afd4-9440-4363-a1f2-a4ff64d44163",
+      "name": "Code"
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  const food = item.json.Food;\n  const calories = item.json.Calories;\n  const protein = item.json.Proteins;\n  const carbs = item.json.Carbs?.trim?.() || \"未知\";\n  const fat = item.json.Fat?.trim?.() || \"未知\";\n\n  return {\n    json: {\n      text: ` 您刚刚摄入的食物为「${food}」。\\n 热量约 ${calories} 千卡，其中蛋白质 ${protein}g，碳水 ${carbs}g，脂肪 ${fat}g。\\n 记得多喝水，保持运动哦～`\n    }\n  };\n});\n\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        260
+      ],
+      "id": "3527ef9a-955d-4f8f-a2e3-148cdb80ec0c",
+      "name": "Code1"
+    },
+    {
+      "parameters": {
+        "collection": "food_analysis",
+        "options": {},
+        "query": "=={{ $json.query_date.length === 7\n      ? { \"Date\": { \"$regex\": \"^\" + $json.query_date } }   // 整月：^2024-06\n      : { \"Date\": $json.query_date }                       // 单日：2024-06-03\n}}\n"
+      },
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1.1,
+      "position": [
+        860,
+        760
+      ],
+      "id": "5e9a6a64-c25c-4556-addc-905de4b92988",
+      "name": "MongoDB3",
+      "alwaysOutputData": true,
+      "credentials": {
+        "mongoDb": {
+          "id": "N6R9oqDschm5r4Cy",
+          "name": "MongoDB account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json[\"chatInput\"];\nconst match = input.match(/(\\d{1,2})月(\\d{1,2})[号日]?/);\n\nif (match) {\n  const year = new Date().getFullYear();  // 默认为今年\n  const month = match[1].padStart(2, '0');\n  const day = match[2].padStart(2, '0');\n  const formattedDate = `${year}-${month}-${day}`;\n  return [{ json: { query_date: formattedDate } }];\n} else {\n  return [{ json: { error: \"无法识别日期，请使用 'X月X号' 格式。\" } }];\n}\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -520,
+        1720
+      ],
+      "id": "b77f9006-ec2b-4746-8e2c-ecacbc339046",
+      "name": "提取中的日期"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.1,
+      "position": [
+        1460,
+        760
+      ],
+      "id": "8128925e-3b07-4484-b116-4c9aea53d2b6",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "query_today",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "010d2a01-9746-45eb-897d-1c4258802738"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "15704a3f-33f1-44dc-8b41-8bd40904b36e",
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "query_month",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "139f3851-c49a-4f17-ab4a-1dbec3821e0e",
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "query_today_item",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "f08a215c-34fb-4ebb-9462-002da7249c77",
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "other ",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "b4842ef1-59f5-4dfc-8653-f46d45cf1846",
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "query_date",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        -780,
+        1200
+      ],
+      "id": "b45298ac-b575-4486-9afd-47f28b9727fa",
+      "name": "Switch1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $json.message?.content;\n\nlet parsed;\ntry {\n  parsed = JSON.parse(raw);\n} catch (e) {\n  parsed = { intent: \"other\", summary: \"解析失败\", date: null, item: null };\n}\n\nreturn [{ json: parsed }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -780,
+        840
+      ],
+      "id": "7efc7577-792f-47ab-a612-5521ccedc8c6",
+      "name": "Code2"
+    },
+    {
+      "parameters": {
+        "numberInputs": 3
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.1,
+      "position": [
+        -380,
+        1620
+      ],
+      "id": "b20a610d-4f53-45d3-9cad-725716849155",
+      "name": "Merge1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Loop over input items and add a new field called 'myNewField' to the JSON of each one\n// 合并两个输入对象（index 0 和 1）\n// 获取 n8n Code 节点默认输入：items 是一个数组，每个元素是 { json: {...} }\nconst item1 = items[0].json;\nconst item2 = items[1].json;\n\n// 合并两个 JSON 对象\nconst merged = {\n  ...item1,\n  ...item2\n};\n\n// 输出合并后的单个对象（必须包在数组里）\nreturn [{ json: merged }];\n\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        1420
+      ],
+      "id": "e0f80e9d-e4fe-4089-909f-a130be0eec2a",
+      "name": "Code3"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "chatgpt-4o-latest",
+          "mode": "list",
+          "cachedResultName": "CHATGPT-4O-LATEST"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=你是一位智能助手，请从用户的输入中判断他想查询哪类数据，进行意图识别。只返回以下 JSON 格式：\n\n只返回以下 JSON 格式，不要输出解释性文字：\n\n{\n  \"intent\": \"query_today\" | \"query_date\" | \"query_month\" | \"query_today_item\" | \"other\",\n  \"summary\": \"简要描述用户意图\",\n  \"date\": \"如果用户提到具体日期，请返回 yyyy-MM-dd；如果是月份（如“6月”），请返回 yyyy-MM；否则为 null\",\n  \"item\": \"如果用户提到想查询的具体食物（如“牛肉饭”），请返回名称，否则为 null\"\n}\n\n用户输入：{{ $json.chatInput }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        -1180,
+        820
+      ],
+      "id": "fcfcb177-27e8-46f1-b764-2f59aca820ed",
+      "name": "OpenAI1识别意图",
+      "credentials": {
+        "openAiApi": {
+          "id": "swewjuzYX9Z3PE56",
+          "name": "OpenAi account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const date = $json.date;\n\nlet matchCondition = {};\n\nif (date && date.length === 7) {\n  // 只提供了月份，例如 \"2024-08\"\n  matchCondition = { \"Date\": { \"$regex\": \"^\" + date } };\n} else if (date && date.length === 10) {\n  // 提供了具体日期，例如 \"2024-08-01\"\n  matchCondition = { \"Date\": date };\n} else {\n  // 没有提供日期，默认使用今天的日期\n  const now = new Date();\n  const yyyy = now.getFullYear();\n  const mm = String(now.getMonth() + 1).padStart(2, '0');\n  const dd = String(now.getDate()).padStart(2, '0');\n  const todayStr = `${yyyy}-${mm}-${dd}`;\n  matchCondition = { \"Date\": todayStr };\n}\n\nreturn [\n  {\n    json: {\n      match: matchCondition\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -80,
+        980
+      ],
+      "id": "6e9e21c9-ca9f-460c-b8c7-92de8b94dc97",
+      "name": "Code4"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "query_today_item",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "c1616360-571f-44b1-ae9f-279cf69e3a2b"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "0b3ff68e-a803-4def-83f0-e4f8ae6855f0",
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "query_date",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        -400,
+        780
+      ],
+      "id": "302b1452-7e0f-4c32-9353-e41e31a1bc8a",
+      "name": "Switch2"
+    },
+    {
+      "parameters": {
+        "collection": "food_analysis",
+        "options": {},
+        "query": "={\n  \"Date\": \"{{ $now.format('yyyy-MM-dd') }}\",\n  \"Item\": \"{{ $json.item }}\"\n}\n\n"
+      },
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1.1,
+      "position": [
+        140,
+        1340
+      ],
+      "id": "eb02c982-ce1c-4e87-a373-531e1e6b38e5",
+      "name": "MongoDB4",
+      "credentials": {
+        "mongoDb": {
+          "id": "piZk1QFkUWQWMup5",
+          "name": "MongoDB account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Loop over input items and add a new field called 'myNewField' to the JSON of each one\n// 假设 MongoDB 返回的是一个数组，取第一项\nconst result = $input[0].json;\n\nif (!result || Object.keys(result).length === 0) {\n  return [\n    {\n      json: {\n        text: `没有找到对应的食物记录，请确认您今天是否吃了这个食物，或稍后再试～`\n      }\n    }\n  ];\n}\n\n// 提取字段\nconst food = result.Item || \"未知食物\";\nconst calories = result.Calories || \"未知\";\nconst protein = result.Protein || \"未知\";\nconst carbs = result.Carbs || \"未知\";\nconst fat = result.Fat || \"未知\";\n\n// 输出文本\nconst text = ` 您刚刚摄入的食物为「${food}」。\\n热量约 ${calories} 千卡，其中蛋白质 ${protein}g，碳水 ${carbs}g，脂肪 ${fat}g。\\n💧 记得多喝水，保持运动哦～`;\n\nreturn [\n  {\n    json: { text }\n  }\n];\n;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        560,
+        1180
+      ],
+      "id": "374376ad-6a29-41b0-8414-613d44f041a2",
+      "name": "Code5"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Loop over input items and add a new field called 'myNewField' to the JSON of each one\n/**\n * 输入示例：\n *   { match: { Date: \"2025-06-06\" } }\n *   { match: { Date: { \"$regex\": \"^2025-06\" } } }\n */\n\nconst inObj = $json.match || {};          // 取 match 对象\nlet queryDate = null;\n\nif (typeof inObj.Date === 'string') {\n  // 形式： \"2025-06-06\"\n  queryDate = inObj.Date;\n} else if (inObj.Date && inObj.Date.$regex) {\n  // 形式： { \"$regex\": \"^2025-06\" }\n  queryDate = inObj.Date.$regex.replace(/^(\\^)/, ''); // 去掉前导 ^\n}\n\n// 如果依然没有解析到，就给一个默认值（可选）\nif (!queryDate) {\n  const now = new Date();\n  const yyyy = now.getFullYear();\n  const mm   = String(now.getMonth() + 1).padStart(2, '0');\n  const dd   = String(now.getDate()).padStart(2, '0');\n  queryDate  = `${yyyy}-${mm}-${dd}`; // 默认今天\n}\n\nreturn [{\n  json: { query_date: queryDate }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        320,
+        1020
+      ],
+      "id": "2709418e-e440-4acb-8180-164a2eb11a75",
+      "name": "Code6"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "OpenAI": {
+      "main": [
+        [
+          {
+            "node": "解析结构",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "解析结构": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MongoDB": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MongoDB1": {
+      "main": [
+        [
+          {
+            "node": "Code1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "MongoDB1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "OpenAI",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "OpenAI1识别意图",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MongoDB2": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields1": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MongoDB3": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "提取中的日期": {
+      "main": [
+        []
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code2": {
+      "main": [
+        [
+          {
+            "node": "Switch1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch1": {
+      "main": [
+        [
+          {
+            "node": "Code4",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code4",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code4",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [],
+        [
+          {
+            "node": "Code4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge1": {
+      "main": [
+        []
+      ]
+    },
+    "Code3": {
+      "main": [
+        []
+      ]
+    },
+    "OpenAI1识别意图": {
+      "main": [
+        [
+          {
+            "node": "Code2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code4": {
+      "main": [
+        [
+          {
+            "node": "MongoDB2",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Code6",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MongoDB4": {
+      "main": [
+        [
+          {
+            "node": "Code5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code6": {
+      "main": [
+        [
+          {
+            "node": "MongoDB3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "5e6db705-7d0c-4dbb-a94e-2714c57570f9",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "b3e1c66506bd07262ef78d5a57dabb2c9f245886d101c3960f62eb73e7fd816d"
+  },
+  "id": "3Bfj5csoeuPIlJYf",
+  "tags": []
+}
